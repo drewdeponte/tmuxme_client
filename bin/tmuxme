@@ -1,3 +1,68 @@
 #!/usr/bin/env ruby
 
-puts "Hello"
+require 'rubygems'
+require 'rest-client'
+require 'net/ssh'
+require 'json'
+
+Thread.abort_on_exception = true
+
+def generate_authorized_keys_content(public_keys)
+  cleaned_keys = []
+  public_keys.each do |pk|
+    cleaned_keys << "command=\"tmux -S /tmp/tmuxme_pair_sock attach\" #{pk.strip}"
+  end
+  return cleaned_keys.join("\n")
+end
+
+if ARGV.length < 1
+  puts "You can't pair program with yourself silly."
+end
+
+pairer = ARGV[0]
+
+begin
+  # back up users authorized_keys file
+  if !File.exists?("#{ENV['HOME']}/.ssh/authorized_keys.tmuxme.original")
+    FileUtils.cp("#{ENV['HOME']}/.ssh/authorized_keys", "#{ENV['HOME']}/.ssh/authorized_keys.tmuxme.original")
+  end
+  FileUtils.cp("#{ENV['HOME']}/.ssh/authorized_keys", "#{ENV['HOME']}/.ssh/authorized_keys.tmuxme.backup")
+
+  # fetch the specified users public keys
+  response = RestClient.get "http://tmux.me/api/v1/users/#{pairer}/public_keys.json"
+  public_keys = JSON.parse(response.to_s)
+
+  # generate the new authorized_keys content from obtained public keys
+  content = generate_authorized_keys_content(public_keys)
+
+  original_authorized_keys_content = File.read("#{ENV['HOME']}/.ssh/authorized_keys")
+
+  # prepend the generated content to the authorized_keys file
+  new_authorized_keys_content = [content, original_authorized_keys_content].join("\n")
+  File.open("#{ENV['HOME']}/.ssh/authorized_keys", "w") do |f|
+    f.write(new_authorized_keys_content)
+  end
+
+  # setup the remote port forward (need to spin off this in a sep thread)
+  Thread.new do
+    # Fetch an un-used high numbered port from the tmux.me REST api.
+
+    # Starts the tunnel but blocks so would probably need to throw this in a child
+    # thread of the process.
+    Net::SSH.start("tmux.me", "tunnel") do |ssh|
+      ssh.forward.remote(22, "localhost", 6006, "0.0.0.0")
+      ssh.loop { true }
+    end
+  end
+
+  # launch detached tmux sessions
+  `tmux -S /tmp/tmuxme_pair_sock new-session -s tmuxme -d`
+
+  # notify tmux.me service that the pairing session is ready
+
+  # attach to tmux session and wait for that process to exit
+  `tmux -S /tmp/tmuxme_pair_sock attach`
+ensure
+  # when the tmux process exits then restore the authorized_keys file
+  FileUtils.cp("#{ENV['HOME']}/.ssh/authorized_keys.tmuxme.backup", "#{ENV['HOME']}/.ssh/authorized_keys")
+end
