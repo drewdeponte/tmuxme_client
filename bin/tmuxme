@@ -18,9 +18,11 @@ end
 
 if ARGV.length < 1
   puts "You can't pair program with yourself silly."
+  puts "Usage: tmuxme user1 [user2...]"
+  exit
 end
 
-pairer = ARGV[0]
+pairers = ARGV.dup
 
 remote_port = nil
 remote_port_lock = Mutex.new
@@ -34,9 +36,12 @@ begin
   puts "Backing up ~/.ssh/authorized_keys to ~/.ssh/authorized_keys.tmuxme.backup"
   FileUtils.cp("#{ENV['HOME']}/.ssh/authorized_keys", "#{ENV['HOME']}/.ssh/authorized_keys.tmuxme.backup")
 
+  public_keys = []
   # fetch the specified users public keys
-  response = RestClient.get "http://tmux.me/api/v1/users/#{pairer}/public_keys.json"
-  public_keys = JSON.parse(response.to_s)
+  pairers.each do |pair|
+    response = RestClient.get "http://tmux.me/api/v1/users/#{pair}/public_keys.json"
+    public_keys.concat(JSON.parse(response.to_s))
+  end
 
   # generate the new authorized_keys content from obtained public keys
   content = generate_authorized_keys_content(public_keys)
@@ -44,7 +49,7 @@ begin
   original_authorized_keys_content = File.read("#{ENV['HOME']}/.ssh/authorized_keys")
 
   # prepend the generated content to the authorized_keys file
-  puts "Updating ~/.ssh/authorized_keys with (#{pairer}) public keys"
+  puts "Updating ~/.ssh/authorized_keys with (#{pairers.join(', ')}) public keys"
   new_authorized_keys_content = [content, original_authorized_keys_content].join("\n")
   File.open("#{ENV['HOME']}/.ssh/authorized_keys", "w") do |f|
     f.write(new_authorized_keys_content)
@@ -77,10 +82,10 @@ begin
   # launch detached tmux sessions
   `tmux -S /tmp/tmuxme_pair_sock new-session -s tmuxme -d`
 
-  puts "To invite (#{pairer}) to the pairing session instruct them to run the following:"
+  puts "To invite (#{pairers.join(', ')}) to the pairing session instruct them to run the following:"
   puts
   remote_port_lock.synchronize {
-    puts "ssh #{ENV['USER']}@tmux.me -p #{remote_port}"
+    puts "\tssh #{ENV['USER']}@tmux.me -p #{remote_port}"
   }
   puts
   print "Press enter to attach to the tmux session."
