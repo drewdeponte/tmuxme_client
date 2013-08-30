@@ -1,0 +1,95 @@
+#!/bin/sh
+
+function getAvailableHiddenUserUid()
+{
+  local __UIDS=$(dscl . -list /Users UniqueID | awk '{print $2}' | sort -ugr)
+  local __NewUID
+  for __NewUID in $__UIDS
+  do
+    if [[ $__NewUID -lt 499 && $__NewUID -ne 498 ]] ; then
+      break;
+    fi
+  done
+
+  echo $((__NewUID+1))
+}
+
+function generateRandomPassword()
+{
+  echo `date | md5`
+}
+
+
+# Make sure only root can run our script
+if [[ $EUID -ne 0 ]]; then
+ echo "This script must be run as root" 1>&2
+ exit 1
+fi
+
+# USER_UID=499 # this should be a number under 500 so it is a hidden account
+USER_UID=$(getAvailableHiddenUserUid)
+
+# This script is design to provide a simple mechanism to help with automating
+# the process of creating an account for gitosis to use on systems.
+
+# The following are variables which are likely to change per installation.
+USERNAME="tmuxme"
+USER_FULL_NAME="tmuxme"
+
+# The following are variables unlikely to change but possibly could change
+# per installation.
+PRIMARY_GID=1000
+
+# The following are variables which are highly unlikely to change and may
+# only change for differences in the operating system.
+USER_SHELL="/bin/bash"          # Mac OS X 10.5.6
+# LOC_DOMAIN="/Local/Default"     # Mac OS X 10.5.6
+LOC_DOMAIN="."     # Mac OS X 10.5.6
+
+PASSWORD=$(generateRandomPassword)
+
+# Tell the system to automatically hide user accounts thate have a UID < 500
+# LOGIN_WIN_PREFS="/Library/Preferences/com.apple.loginwindow"
+# defaults write ${LOGIN_WIN_PREFS} Hide500Users -bool YES
+# 
+# Create the user entry.
+dscl ${LOC_DOMAIN} -create /Users/${USERNAME}
+
+# Set the users shell.
+dscl ${LOC_DOMAIN} -create /Users/${USERNAME} UserShell ${USER_SHELL}
+
+# Set the users full name.
+dscl ${LOC_DOMAIN} -create /Users/${USERNAME} RealName "${USER_FULL_NAME}"
+
+# Associate the user with a unique id.
+dscl ${LOC_DOMAIN} -create /Users/${USERNAME} UniqueID ${USER_UID}
+
+# Associate the user with a primary gorup id.
+dscl ${LOC_DOMAIN} -create /Users/${USERNAME} PrimaryGroupID ${PRIMARY_GID}
+
+# Create the users home directory.
+dscl ${LOC_DOMAIN} -create /Users/${USERNAME} NFSHomeDirectory /Users/${USERNAME}
+
+# Set the users password.
+dscl ${LOC_DOMAIN} -passwd /Users/${USERNAME} ${PASSWORD}
+
+
+mkdir -p /Users/${USERNAME}/.ssh
+touch /Users/${USERNAME}/.ssh/authorized_keys
+chown -R ${USER_UID}:${PRIMARY_GID} /Users/${USERNAME}
+chmod 0700 /Users/${USERNAME}/.ssh
+chmod 0600 /Users/${USERNAME}/.ssh/authorized_keys
+
+# Enable Remote Login if it is not currently enabled.
+systemsetup -setremotelogin on &>/dev/null
+
+if [[ $(dscl ${LOC_DOMAIN} list /Groups | grep 'access_ssh') = 'com.apple.access_ssh' ]]; then
+  # Remote Access is limted to specific users
+  USER_GENERATED_UID=$(dscl . -read /Users/${USERNAME} GeneratedUID | awk '{print $2}')
+  dscl ${LOC_DOMAIN} -read /Groups/com.apple.access_ssh GroupMembership | grep ${USERNAME} &>/dev/null
+  if [[ $? -ne 0 ]]; then # user is not in access list
+    # Append the "tmuxme" user to the list of users allowed to connect remotely
+    dscl ${LOC_DOMAIN} -append /Groups/com.apple.access_ssh GroupMembers ${USER_GENERATED_UID}
+    dscl ${LOC_DOMAIN} -append /Groups/com.apple.access_ssh GroupMembership ${USERNAME}
+  fi
+fi
