@@ -8,9 +8,9 @@ Gem::Specification.new do |spec|
   spec.version       = TmuxmeClient::VERSION
   spec.authors       = ["Andrew De Ponte"]
   spec.email         = ["cyphactor@gmail.com"]
-  spec.description   = %q{TODO: Write a gem description}
-  spec.summary       = %q{TODO: Write a gem summary}
-  spec.homepage      = ""
+  spec.description   = %q{The official client for the http://tmux.me pair programming service}
+  spec.summary       = %q{Command line client for the http://tmux.me pairing service.}
+  spec.homepage      = "http://tmux.me"
   spec.license       = "MIT"
 
   spec.files         = `git ls-files`.split($/)
