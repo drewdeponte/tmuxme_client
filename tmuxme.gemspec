@@ -1,11 +1,11 @@
 # coding: utf-8
 lib = File.expand_path('../lib', __FILE__)
 $LOAD_PATH.unshift(lib) unless $LOAD_PATH.include?(lib)
-require 'tmuxme_client/version'
+require 'tmuxme/version'
 
 Gem::Specification.new do |spec|
-  spec.name          = "tmuxme_client"
-  spec.version       = TmuxmeClient::VERSION
+  spec.name          = "tmuxme"
+  spec.version       = Tmuxme::VERSION
   spec.authors       = ["Andrew De Ponte"]
   spec.email         = ["cyphactor@gmail.com"]
   spec.description   = %q{The official client for the http://tmux.me pair programming service}
