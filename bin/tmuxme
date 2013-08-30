@@ -4,6 +4,7 @@ require 'rubygems'
 require 'rest-client'
 require 'net/ssh'
 require 'json'
+require 'thread'
 
 Thread.abort_on_exception = true
 
@@ -21,11 +22,16 @@ end
 
 pairer = ARGV[0]
 
+remote_port = nil
+remote_port_lock = Mutex.new
+
 begin
   # back up users authorized_keys file
   if !File.exists?("#{ENV['HOME']}/.ssh/authorized_keys.tmuxme.original")
+    puts "Backing up ~/.ssh/authorized_keys to ~/.ssh/authorized_keys.tmuxme.original to store it the first time tmuxme was run"
     FileUtils.cp("#{ENV['HOME']}/.ssh/authorized_keys", "#{ENV['HOME']}/.ssh/authorized_keys.tmuxme.original")
   end
+  puts "Backing up ~/.ssh/authorized_keys to ~/.ssh/authorized_keys.tmuxme.backup"
   FileUtils.cp("#{ENV['HOME']}/.ssh/authorized_keys", "#{ENV['HOME']}/.ssh/authorized_keys.tmuxme.backup")
 
   # fetch the specified users public keys
@@ -38,6 +44,7 @@ begin
   original_authorized_keys_content = File.read("#{ENV['HOME']}/.ssh/authorized_keys")
 
   # prepend the generated content to the authorized_keys file
+  puts "Updating ~/.ssh/authorized_keys with (#{pairer}) public keys"
   new_authorized_keys_content = [content, original_authorized_keys_content].join("\n")
   File.open("#{ENV['HOME']}/.ssh/authorized_keys", "w") do |f|
     f.write(new_authorized_keys_content)
@@ -45,24 +52,51 @@ begin
 
   # setup the remote port forward (need to spin off this in a sep thread)
   Thread.new do
-    # Fetch an un-used high numbered port from the tmux.me REST api.
+    port = nil
+    while true
+      # Fetch an un-used high numbered port from the tmux.me REST api.
+      remote_port_lock.synchronize {
+        remote_port = 6000 + rand(50000)
+        port = remote_port
+      }
 
-    # Starts the tunnel but blocks so would probably need to throw this in a child
-    # thread of the process.
-    Net::SSH.start("tmux.me", "tunnel") do |ssh|
-      ssh.forward.remote(22, "localhost", 6006, "0.0.0.0")
-      ssh.loop { true }
+      begin
+        # Starts the tunnel but blocks so would probably need to throw this in a child
+        # thread of the process.
+        Net::SSH.start("tmux.me", "tunnel") do |ssh|
+          ssh.forward.remote(22, "localhost", port, "0.0.0.0")
+          ssh.loop { true }
+        end
+      rescue Exception => e
+        puts e.message
+        next
+      end
     end
   end
 
   # launch detached tmux sessions
   `tmux -S /tmp/tmuxme_pair_sock new-session -s tmuxme -d`
 
+  puts "To invite (#{pairer}) to the pairing session instruct them to run the following:"
+  puts
+  remote_port_lock.synchronize {
+    puts "ssh #{ENV['USER']}@tmux.me -p #{remote_port}"
+  }
+  puts
+  print "Press enter to attach to the tmux session."
+  $stdout.flush
+  garbage = $stdin.gets
+
   # notify tmux.me service that the pairing session is ready
+  # remote_port_lock.synchronize {
+  #   # send current user name run as on this system, the remote port, the users
+  #   # that are invited
+  # }
 
   # attach to tmux session and wait for that process to exit
   `tmux -S /tmp/tmuxme_pair_sock attach`
 ensure
+  puts "Restoring ~/.ssh/authorized_keys from ~/.ssh/authorized_keys.tmuxme.backup"
   # when the tmux process exits then restore the authorized_keys file
   FileUtils.cp("#{ENV['HOME']}/.ssh/authorized_keys.tmuxme.backup", "#{ENV['HOME']}/.ssh/authorized_keys")
 end
