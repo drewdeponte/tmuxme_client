@@ -105,21 +105,22 @@ begin
   `tmux -S /tmp/tmuxme_pair_sock new-session -s tmuxme -d`
 
   puts
-  puts "To invite (#{pairers.join(', ')}) to the pairing session instruct them to run the following:"
+  puts "E-mail invites will be sent to (#{pairers.join(', ')}) when you press enter below."
+  puts "However, to manually invite (#{pairers.join(', ')}) to the pairing session instruct them to run the following:"
   puts
   remote_port_lock.synchronize {
     puts "\tssh #{ENV['USER']}@tmux.me -p #{remote_port}"
   }
   puts
-  print "Press enter to attach to the tmux session."
+  print "Press enter to invite (#{pairers.join(', ')}) via e-mail and attach to the tmux session."
   $stdout.flush
   garbage = $stdin.gets
 
   # notify tmux.me service that the pairing session is ready
-  # remote_port_lock.synchronize {
-  #   # send current user name run as on this system, the remote port, the users
-  #   # that are invited
-  # }
+  puts "Sending invites to (#{pairers.join(', ')})."
+  remote_port_lock.synchronize {
+    RestClient.post "http://tmux.me/api/v1/pairing_sessions", :system_user => ENV['USER'], :pairing_users => pairers, :port_number => remote_port
+  }
 
   # attach to tmux session and wait for that process to exit
   `tmux -S /tmp/tmuxme_pair_sock attach`
