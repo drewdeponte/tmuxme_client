@@ -22,6 +22,16 @@ if ARGV.length < 1
   exit
 end
 
+# Check if remote login is enabled
+`netstat -an | grep "*\.22" | grep tcp4 | grep LISTEN`
+if $? != 0
+  # didn't find it listening on port 22
+  puts "Error: Remote Login is not enabled"
+  puts "tmuxme requires Remote Login to be enabled for this user."
+  puts "Please enable Remote Login in System Preferences -> Sharing -> Remote Login and try again."
+  exit
+end
+
 invitees = ARGV.dup
 pairers = []
 
