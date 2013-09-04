@@ -39,6 +39,18 @@ remote_port = nil
 remote_port_lock = Mutex.new
 
 begin
+
+  # Make sure the ~/.ssh directory exists
+  if !File.directory?("#{ENV['HOME']}/.ssh")
+    FileUtils.mkdir_p("#{ENV['HOME']}/.ssh", :mode => 0700)
+  end
+
+  # Make sure the ~/.ssh/authorized_keys file exists
+  if !File.exists?("#{ENV['HOME']}/.ssh/authorized_keys")
+    FileUtils.touch("#{ENV['HOME']}/.ssh/authorized_keys")
+    FileUtils.chmod(0600, "#{ENV['HOME']}/.ssh/authorized_keys")
+  end
+
   # back up users authorized_keys file
   if !File.exists?("#{ENV['HOME']}/.ssh/authorized_keys.tmuxme.original")
     puts "- Backing up ~/.ssh/authorized_keys to ~/.ssh/authorized_keys.tmuxme.original to store it the first time tmuxme was run"
