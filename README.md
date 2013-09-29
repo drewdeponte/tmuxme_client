@@ -1,24 +1,16 @@
 # TmuxmeClient
 
-TODO: Write a gem description
+The official [tmux.me](http://tmux.me) client application.
 
 ## Installation
 
-Add this line to your application's Gemfile:
+Install it yourself as:
 
-    gem 'tmuxme_client'
-
-And then execute:
-
-    $ bundle
-
-Or install it yourself as:
-
-    $ gem install tmuxme_client
+    $ gem install tmuxme
 
 ## Usage
 
-TODO: Write usage instructions here
+    $ tmuxme <user1> [<user2>...]
 
 ## Contributing
 
