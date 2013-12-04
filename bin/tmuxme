@@ -5,6 +5,7 @@ require 'rest-client'
 require 'net/ssh'
 require 'json'
 require 'thread'
+require 'rbconfig'
 
 Thread.abort_on_exception = true
 
@@ -16,6 +17,25 @@ def generate_authorized_keys_content(public_keys)
   return cleaned_keys.join("\n")
 end
 
+
+def os
+  @os ||= (
+    host_os = RbConfig::CONFIG['host_os']
+    case host_os
+    when /mswin|msys|mingw|cygwin|bccwin|wince|emc/
+      :windows
+    when /darwin|mac os/
+      :macosx
+    when /linux/
+      :linux
+    when /solaris|bsd/
+      :unix
+    else
+      :unknown
+    end
+  )
+end
+
 if ARGV.length < 1
   puts "You can't pair program with yourself silly."
   puts "Usage: tmuxme user1 [user2...]"
@@ -23,12 +43,14 @@ if ARGV.length < 1
 end
 
 # Check if remote login is enabled
-`netstat -an | grep "*\.22" | grep tcp4 | grep LISTEN`
+`netstat -an | grep "[:.]22 " | grep "tcp[^6]" | grep LISTEN`
 if $? != 0
   # didn't find it listening on port 22
   puts "Error: Remote Login is not enabled"
   puts "tmuxme requires Remote Login to be enabled for this user."
-  puts "Please enable Remote Login in System Preferences -> Sharing -> Remote Login and try again."
+  if os == :macosx
+    puts "Please enable Remote Login in System Preferences -> Sharing -> Remote Login and try again."
+  end
   exit
 end
 
